@@ -31,12 +31,19 @@
     .forEach((link) => link.addEventListener("click", () => setMenu(false)));
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") setMenu(false);
+    if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+      setMenu(false);
+      toggle.focus();
+    }
   });
 
-  window
-    .matchMedia("(min-width: 761px)")
-    .addEventListener("change", () => setMenu(false));
+  const desktopMedia = window.matchMedia("(min-width: 761px)");
+  const closeMenuOnDesktop = () => setMenu(false);
+  if (desktopMedia.addEventListener) {
+    desktopMedia.addEventListener("change", closeMenuOnDesktop);
+  } else {
+    desktopMedia.addListener(closeMenuOnDesktop);
+  }
 
   /* Cabeçalho ao rolar */
   const onScroll = () =>
@@ -90,6 +97,8 @@
   /* Filtro do catálogo */
   const filterButtons = document.querySelectorAll(".filter-btn");
   const products = document.querySelectorAll(".product");
+  const filterTimers = new WeakMap();
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   filterButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -101,8 +110,47 @@
       });
       products.forEach((item) => {
         const show = filter === "todos" || item.dataset.category === filter;
-        item.classList.toggle("is-hidden", !show);
-        if (show) item.classList.add("is-visible");
+        const pendingTimer = filterTimers.get(item);
+        if (pendingTimer) {
+          window.clearTimeout(pendingTimer);
+          filterTimers.delete(item);
+        }
+
+        if (show) {
+          item.classList.add("is-visible");
+          if (item.classList.contains("is-hidden")) {
+            item.classList.remove("is-hidden", "is-filtering-out");
+            if (!reducedMotion.matches) {
+              item.classList.add("is-filtering-in");
+              window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                  item.classList.remove("is-filtering-in");
+                });
+              });
+            }
+          } else {
+            item.classList.remove("is-filtering-in", "is-filtering-out");
+          }
+          return;
+        }
+
+        item.classList.remove("is-filtering-in");
+        if (reducedMotion.matches) {
+          item.classList.add("is-hidden");
+          item.classList.remove("is-filtering-out");
+          return;
+        }
+
+        if (item.classList.contains("is-hidden")) return;
+        item.classList.add("is-filtering-out");
+        const timer = window.setTimeout(() => {
+          if (item.classList.contains("is-filtering-out")) {
+            item.classList.add("is-hidden");
+            item.classList.remove("is-filtering-out");
+          }
+          filterTimers.delete(item);
+        }, 320);
+        filterTimers.set(item, timer);
       });
     });
   });
